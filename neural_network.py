@@ -31,17 +31,14 @@ class NeuralNetwork:
             input_dim, output_dim = int(self.layers[i]), int(self.layers[i+1])
             
             if weight_init == "random":
-                W = np.random.randn(output_dim, input_dim) * 0.01  # Small random values
+                w = np.random.randn(output_dim, input_dim)  # Small random values
             
             elif weight_init == "Xavier":
-                W = np.random.randn(output_dim, input_dim) * np.sqrt(1 / input_dim)  # Xavier initialization
-            
-            else:
-                raise ValueError("Invalid weight initialization method. Choose 'random' or 'Xavier'.")
+                w = np.random.randn(output_dim, input_dim) * np.sqrt(1 / input_dim)  # Xavier initialization
 
             b = np.zeros((output_dim, 1))  # Initialize biases to zero
 
-            weights.append(W)
+            weights.append(w)
             biases.append(b)
         
         return weights, biases
@@ -56,27 +53,27 @@ class NeuralNetwork:
         elif self.activation == "ReLU":
             return (x > 0) * 1 if derivative else np.maximum(0, x)
         else:
-            return x if derivative else 1  # Identity function
+            return 1 if derivative else x  # Identity function
 
     def forward(self, X):
         H, A = [X], []
         h = X
 
         for w, b in zip(self.weights, self.biases):
-            a = np.dot(w, h) + b
+            a = np.dot(h, w.T) + b.T
             h = self.activation_function(a) if w is not self.weights[-1] else self.softmax(a)
-            A.append(a)
             H.append(h)
-
-        return A, H
+            A.append(a)
+        
+        return H, A
     
     def softmax(self, x):
         exp_x = np.exp(x - np.max(x, axis=0, keepdims=True))
         return exp_x / np.sum(exp_x, axis=0, keepdims=True)
     
     def loss(self, Y_pred, Y_true):
-        m = Y_true.shape[1]
-        loss = -np.sum(Y_true * np.log(Y_pred + 1e-9)) / m
+        n = Y_true.shape[0]
+        loss = -np.sum(Y_true * np.log(Y_pred + 1e-9)) / n
         return loss
     
     def gradients(self, H, A, Y_true):
@@ -84,26 +81,27 @@ class NeuralNetwork:
         da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
         dw, db = [], []
 
-        for i in reversed(range(len(self.weights)-1)):
-            dw.insert(0, np.dot(da.T, H[i]).T / n) #+ self.weight_decay * self.weights[i]
-            #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
-          
-            db.insert(0, da.T  / H[i].shape[1])
+        for i in reversed(range(len(self.weights))):
+            dw.insert(0, np.dot(H[i].T, da) / n) #+ self.weight_decay * self.weights[i]
+            db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
+            #db.insert(0, da / m)
             if i > 0:
                 dh = np.dot(da, self.weights[i])
-                da = dh * self.activation_function(A[i], derivative=True)
+                da = dh * self.activation_function(A[i-1], derivative=True)
                 #da = np.dot(self.weights[i].T, da) * self.activation_function(A[i-1], derivative=True)
 
         return {"dw": dw, "db": db}
 
     def gradients_nag(self, H, A, Y_true, u_w):
+        m = Y_true.shape[1]
         da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(da, H[i].T) / H[i].shape[1])  + self.weight_decay * self.weights[i]
+            dw.insert(0, np.dot(da, H[i].T) / m)  + self.weight_decay * self.weights[i]
+            #print("dw1 shape:", dw.shape)
             #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
-            db.insert(0, np.da / H[i].shape[1])
+            db.insert(0, np.da / m)
             if i > 0:
                 dh = np.dot((self.weights[i] - u_w).T, da)
                 da = dh * self.activation_function(A[i-1], derivative=True)
@@ -114,30 +112,30 @@ class NeuralNetwork:
     def gradient_descent(self, grads, grads_nag=None):
         for i in range(len(self.weights)):
             if self.optimizer == "sgd":
-                self.weights[i] = self.weights[i] - self.lr * grads["dw"][i]
-                self.biases[i] = self.biases[i] - self.lr * grads["db"][i]
+                self.weights[i] -= self.lr * grads["dw"][i].T
+                self.biases[i] -= self.lr * grads["db"][i].T
             
             elif self.optimizer in ["momentum", "nesterov"]:
                 if self.optimizer == "nesterov":
-                    self.u_w[i] += self.momentum * self.u_w[i] + grads_nag["dw"][i]
-                    self.u_b[i] += self.momentum * self.u_b[i] + grads_nag["db"][i]
+                    self.u_w[i] += self.momentum * self.u_w[i] + grads_nag["dw"][i].T
+                    self.u_b[i] += self.momentum * self.u_b[i] + grads_nag["db"][i].T
                 else:
-                    self.u_w[i] += self.momentum * self.u_w[i] + grads["dw"][i]
-                    self.u_b[i] += self.momentum * self.u_b[i] + grads["db"][i]
+                    self.u_w[i] += self.momentum * self.u_w[i] + grads["dw"][i].T
+                    self.u_b[i] += self.momentum * self.u_b[i] + grads["db"][i].T
                 self.weights[i] -= self.lr * self.u_w[i]
                 self.biases[i] -= self.lr * self.u_b[i]
             
             elif self.optimizer == "rmsprop":
-                self.v_w[i] = self.beta * self.v_w[i] + (1 - self.beta) * grads["dw"][i] ** 2
-                self.v_b[i] = self.beta * self.v_b[i] + (1 - self.beta) * grads["db"][i] ** 2
+                self.v_w[i] = self.beta * self.v_w[i] + (1 - self.beta) * (grads["dw"][i] ** 2).T
+                self.v_b[i] = self.beta * self.v_b[i] + (1 - self.beta) * (grads["db"][i] ** 2).T
                 self.weights[i] -= self.lr * grads["dw"][i] / (np.sqrt(self.v_w[i]) + self.epsilon)
                 self.biases[i] -= self.lr * grads["db"][i] / (np.sqrt(self.v_b[i]) + self.epsilon)
             
             elif self.optimizer in ["adam", "nadam"]:
-                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * grads["dw"][i]
-                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * grads["db"][i]
-                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grads["dw"][i] ** 2)
-                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grads["dB"][i] ** 2)
+                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * grads["dw"][i].T
+                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * grads["db"][i].T
+                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grads["dw"][i] ** 2).T
+                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grads["db"][i] ** 2).T
 
                 m_w_corr = self.u_w[i] / (1 - self.beta1 ** self.t)
                 m_b_corr = self.u_b[i] / (1 - self.beta1 ** self.t)
@@ -153,22 +151,23 @@ class NeuralNetwork:
 
         self.t += 1  # Update time step for Adam/Nadam
     
-    def train(self, X_train, Y_train, epochs, batch_size, log_interval=10):
+    def train(self, X_train, Y_train, epochs, batch_size, log_interval=1):
         n = X_train.shape[0]
         for epoch in range(epochs):
+            indices = np.random.permutation(n)
+            X_train, Y_train = X_train[indices], Y_train[indices]
 
-            for i in range(int(n/batch_size)):
-                indices = np.random.choice(len(X_train), size=batch_size, replace=False)
-                X_batch, Y_batch = X_train[indices, :], Y_train[indices, :]
-                activations, pre_activations = self.forward(X_batch)
-                grads = self.gradients(activations, pre_activations, Y_batch)
+            for i in range(0, n, batch_size):
+                X_batch, Y_batch = X_train[i:i+batch_size, :], Y_train[i:i+batch_size, :]
+                H, A = self.forward(X_batch)
+                grads = self.gradients(H, A, Y_batch)
                 self.gradient_descent(grads)
 
             if epoch % log_interval == 0:
                 Y_pred = self.predict(X_train)
                 loss = self.loss(Y_pred, Y_train)
-                accuracy = np.mean(np.argmax(Y_pred, axis=0) == np.argmax(Y_train, axis=0))
-                print(f"Epoch {epoch}: Loss={loss:.4f}, Accuracy={accuracy:.4f}")
+                #accuracy = np.mean(np.argmax(Y_pred, axis=0) == np.argmax(Y_train, axis=0))
+                print(f"Epoch {epoch}: Loss={loss:.4f}")
 
     def predict(self, X):
         """
