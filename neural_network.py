@@ -80,30 +80,30 @@ class NeuralNetwork:
         return loss
     
     def gradients(self, H, A, Y_true):
-        m = Y_true.shape[1]
+        n = Y_true.shape[0]
         da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
         dw, db = [], []
 
-        for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(da, H[i].T) / m)  + self.weight_decay * self.weights[i]
+        for i in reversed(range(len(self.weights)-1)):
+            dw.insert(0, np.dot(da.T, H[i]).T / n) #+ self.weight_decay * self.weights[i]
             #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
-            db.insert(0, np.da / m)
+            
+            db.insert(0, da.T  / H[i].shape[1])
             if i > 0:
-                dh = np.dot(self.weights[i].T, da)
-                da = dh * self.activation_function(A[i-1], derivative=True)
+                dh = np.dot(da, self.weights[i])
+                da = dh * self.activation_function(A[i], derivative=True)
                 #da = np.dot(self.weights[i].T, da) * self.activation_function(A[i-1], derivative=True)
 
         return {"dw": dw, "db": db}
-    
+
     def gradients_nag(self, H, A, Y_true, u_w):
-        m = Y_true.shape[1]
         da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(da, H[i].T) / m)  + self.weight_decay * self.weights[i]
+            dw.insert(0, np.dot(da, H[i].T) / H[i].shape[1])  + self.weight_decay * self.weights[i]
             #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
-            db.insert(0, np.da / m)
+            db.insert(0, np.da / H[i].shape[1])
             if i > 0:
                 dh = np.dot((self.weights[i] - u_w).T, da)
                 da = dh * self.activation_function(A[i-1], derivative=True)
@@ -111,11 +111,11 @@ class NeuralNetwork:
 
         return {"dw": dw, "db": db}
     
-    def gradient_descent(self, grads, grads_nag):
+    def gradient_descent(self, grads, grads_nag=None):
         for i in range(len(self.weights)):
             if self.optimizer == "sgd":
-                self.weights[i] -= self.lr * grads["dw"][i]
-                self.biases[i] -= self.lr * grads["db"][i]
+                self.weights[i] = self.weights[i] - self.lr * grads["dw"][i]
+                self.biases[i] = self.biases[i] - self.lr * grads["db"][i]
             
             elif self.optimizer in ["momentum", "nesterov"]:
                 if self.optimizer == "nesterov":
@@ -154,13 +154,12 @@ class NeuralNetwork:
         self.t += 1  # Update time step for Adam/Nadam
     
     def train(self, X_train, Y_train, epochs, batch_size, log_interval=10):
-        m = X_train.shape[1]
+        n = X_train.shape[0]
         for epoch in range(epochs):
-            indices = np.random.permutation(m)
-            X_train, Y_train = X_train[:, indices], Y_train[:, indices]
 
-            for i in range(0, m, batch_size):
-                X_batch, Y_batch = X_train[:, i:i+batch_size], Y_train[:, i:i+batch_size]
+            for i in range(int(n/batch_size)):
+                indices = np.random.choice(len(X_train), size=batch_size, replace=False)
+                X_batch, Y_batch = X_train[indices, :], Y_train[indices, :]
                 activations, pre_activations = self.forward(X_batch)
                 grads = self.gradients(activations, pre_activations, Y_batch)
                 self.gradient_descent(grads)
@@ -170,3 +169,10 @@ class NeuralNetwork:
                 loss = self.loss(Y_pred, Y_train)
                 accuracy = np.mean(np.argmax(Y_pred, axis=0) == np.argmax(Y_train, axis=0))
                 print(f"Epoch {epoch}: Loss={loss:.4f}, Accuracy={accuracy:.4f}")
+
+    def predict(self, X):
+        """
+        Predicts the class probabilities for input X.
+        """
+        activations, _ = self.forward(X)
+        return activations[-1]
