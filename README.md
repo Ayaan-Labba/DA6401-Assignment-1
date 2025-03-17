@@ -4,6 +4,7 @@ Link to Wandb report: https://wandb.ai/ch21b021-indian-institute-of-technology-m
 
 
 ## Project Structure
+```
 .
 
 ├── dataset.py       # Loads and preprocesses data
@@ -17,6 +18,7 @@ Link to Wandb report: https://wandb.ai/ch21b021-indian-institute-of-technology-m
 ├── requirements.txt # Dependencies
 
 └── README.md        # Documentation
+```
 
 
 ## Installing Required Packages
