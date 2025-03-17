@@ -87,7 +87,7 @@ class NeuralNetwork:
         for i in reversed(range(len(self.weights)-1)):
             dw.insert(0, np.dot(da.T, H[i]).T / n) #+ self.weight_decay * self.weights[i]
             #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
-            
+          
             db.insert(0, da.T  / H[i].shape[1])
             if i > 0:
                 dh = np.dot(da, self.weights[i])

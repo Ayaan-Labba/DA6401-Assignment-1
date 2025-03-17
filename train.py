@@ -1,7 +1,7 @@
 import numpy as np
 import argparse
 from dataset import load_data
-from model import NeuralNetwork
+from neural_network import NeuralNetwork
 
 def main():
     parser = argparse.ArgumentParser(description="Train a Neural Network")
