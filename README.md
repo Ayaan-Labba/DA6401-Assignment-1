@@ -5,10 +5,15 @@ Link to Wandb report: https://wandb.ai/ch21b021-indian-institute-of-technology-m
 ## Project Structure
 .
 ├── dataset.py       # Loads and preprocesses data
+
 ├── model.py         # Neural network model with optimizers & training
+
 ├── train.py         # Script to train the model
+
 ├── config.json      # Config file for hyperparameters
+
 ├── requirements.txt # Dependencies
+
 └── README.md        # Documentation
 
 ## Installing Required Packages
