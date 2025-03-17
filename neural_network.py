@@ -1,25 +1,27 @@
 import numpy as np
 
 class NeuralNetwork:
-    def __init__(self, input_size=1, hidden_layers=[1], output_size=1, activation="ReLU", weight_init="random", 
-                 optimizer="sgd", lr=0.01, momentum=0.9, beta1=0.9, beta2=0.999, epsilon=1e-8):
+    def __init__(self, input_size=1, hidden_layers=[1], output_size=1, activation="ReLU", weight_init="random", optimizer="sgd", 
+                 lr=0.01, momentum=0.9, beta = 0.9, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0):
         self.layers = [input_size] + hidden_layers + [output_size]
         self.activation = activation
         self.weights, self.biases = self.init_weights(weight_init)
+        self.weight_decay = weight_decay
 
         self.optimizer = optimizer
         self.lr = lr
         self.momentum = momentum
+        self.beta = beta
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
         self.t = 1  # Time step for Adam/Nadam
 
         # Optimizer state (for momentum-based optimizers)
-        self.momentum_W = [np.zeros_like(w) for w in self.weights]
-        self.momentum_B = [np.zeros_like(b) for b in self.biases]
-        self.v_W = [np.zeros_like(w) for w in self.weights]  # Second moment for Adam/Nadam
-        self.v_B = [np.zeros_like(b) for b in self.biases]
+        self.u_w = [np.zeros_like(w) for w in self.weights]
+        self.u_b = [np.zeros_like(b) for b in self.biases]
+        self.v_w = [np.zeros_like(w) for w in self.weights]  # Second moment for Adam/Nadam
+        self.v_b = [np.zeros_like(b) for b in self.biases]
 
     def init_weights(self, weight_init):
         weights = []
@@ -77,36 +79,44 @@ class NeuralNetwork:
         loss = -np.sum(Y_true * np.log(Y_pred + 1e-9)) / m
         return loss
     
-    def backward(self, H, A, Y_true):
+    def gradients(self, H, A, Y_true):
         m = Y_true.shape[1]
         da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(da, H[i].T) / m)
+            dw.insert(0, np.dot(da, H[i].T) / m)  + self.weight_decay * self.weights[i]
             #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
             db.insert(0, np.da / m)
             if i > 0:
                 dh = np.dot(self.weights[i].T, da)
-                da = dh*self.activation_function(A[i-1], derivative=True)
+                da = dh * self.activation_function(A[i-1], derivative=True)
                 #da = np.dot(self.weights[i].T, da) * self.activation_function(A[i-1], derivative=True)
 
         return {"dw": dw, "db": db}
     
-    def update_weights(self, grads):
+    def gradient_descent(self, grads):
         for i in range(len(self.weights)):
             if self.optimizer == "sgd":
                 self.weights[i] -= self.lr * grads["dw"][i]
                 self.biases[i] -= self.lr * grads["db"][i]
+            
             elif self.optimizer in ["momentum", "nesterov"]:
-                self.momentum_W[i] = self.momentum * self.momentum_W[i] - self.lr * grads["dw"][i]
-                self.momentum_B[i] = self.momentum * self.momentum_B[i] - self.lr * grads["db"][i]
+                self.u_w[i] = self.momentum * self.u_w[i] - self.lr * grads["dw"][i]
+                self.u_b[i] = self.momentum * self.u_b[i] - self.lr * grads["db"][i]
                 if self.optimizer == "nesterov":
-                    self.weights[i] += self.momentum * self.momentum_W[i] - self.lr * grads["dw"][i]
-                    self.biases[i] += self.momentum * self.momentum_B[i] - self.lr * grads["db"][i]
+                    self.weights[i] += self.momentum * self.u_w[i] - self.lr * grads["dw"][i]
+                    self.biases[i] += self.momentum * self.u_b[i] - self.lr * grads["db"][i]
                 else:
-                    self.weights[i] += self.momentum_W[i]
-                    self.biases[i] += self.momentum_B[i]
+                    self.weights[i] += self.u_w[i]
+                    self.biases[i] += self.u_b[i]
+            
+            elif self.optimizer == "rmsprop":
+                self.v_w[i] = self.beta * self.v_w[i] + (1 - self.beta) * grads["dw"][i] ** 2
+                self.v_b[i] = self.beta * self.v_b[i] + (1 - self.beta) * grads["db"][i] ** 2
+                self.weights[i] -= self.learning_rate * grads["dw"][i] / (np.sqrt(self.v_w[i]) + self.epsilon)
+                self.biases[i] -= self.learning_rate * grads["db"][i] / (np.sqrt(self.v_b[i]) + self.epsilon)
+            
             elif self.optimizer in ["adam", "nadam"]:
                 self.momentum_W[i] = self.beta1 * self.momentum_W[i] + (1 - self.beta1) * grads["dw"][i]
                 self.momentum_B[i] = self.beta1 * self.momentum_B[i] + (1 - self.beta1) * grads["db"][i]
@@ -126,3 +136,21 @@ class NeuralNetwork:
                 self.biases[i] -= self.lr * m_B_corr / (np.sqrt(v_B_corr) + self.epsilon)
 
         self.t += 1  # Update time step for Adam/Nadam
+    
+    def train(self, X_train, Y_train, epochs, batch_size, log_interval=10):
+        m = X_train.shape[1]
+        for epoch in range(epochs):
+            indices = np.random.permutation(m)
+            X_train, Y_train = X_train[:, indices], Y_train[:, indices]
+
+            for i in range(0, m, batch_size):
+                X_batch, Y_batch = X_train[:, i:i+batch_size], Y_train[:, i:i+batch_size]
+                activations, pre_activations = self.forward(X_batch)
+                grads = self.gradients(activations, pre_activations, Y_batch)
+                self.gradient_descent(grads)
+
+            if epoch % log_interval == 0:
+                Y_pred = self.predict(X_train)
+                loss = self.loss(Y_pred, Y_train)
+                accuracy = np.mean(np.argmax(Y_pred, axis=0) == np.argmax(Y_train, axis=0))
+                print(f"Epoch {epoch}: Loss={loss:.4f}, Accuracy={accuracy:.4f}")
