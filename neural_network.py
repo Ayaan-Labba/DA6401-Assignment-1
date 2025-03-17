@@ -95,45 +95,61 @@ class NeuralNetwork:
 
         return {"dw": dw, "db": db}
     
-    def gradient_descent(self, grads):
+    def gradients_nag(self, H, A, Y_true, u_w):
+        m = Y_true.shape[1]
+        da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
+        dw, db = [], []
+
+        for i in reversed(range(len(self.weights))):
+            dw.insert(0, np.dot(da, H[i].T) / m)  + self.weight_decay * self.weights[i]
+            #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
+            db.insert(0, np.da / m)
+            if i > 0:
+                dh = np.dot((self.weights[i] - u_w).T, da)
+                da = dh * self.activation_function(A[i-1], derivative=True)
+                #da = np.dot(self.weights[i].T, da) * self.activation_function(A[i-1], derivative=True)
+
+        return {"dw": dw, "db": db}
+    
+    def gradient_descent(self, grads, grads_nag):
         for i in range(len(self.weights)):
             if self.optimizer == "sgd":
                 self.weights[i] -= self.lr * grads["dw"][i]
                 self.biases[i] -= self.lr * grads["db"][i]
             
             elif self.optimizer in ["momentum", "nesterov"]:
-                self.u_w[i] = self.momentum * self.u_w[i] - self.lr * grads["dw"][i]
-                self.u_b[i] = self.momentum * self.u_b[i] - self.lr * grads["db"][i]
                 if self.optimizer == "nesterov":
-                    self.weights[i] += self.momentum * self.u_w[i] - self.lr * grads["dw"][i]
-                    self.biases[i] += self.momentum * self.u_b[i] - self.lr * grads["db"][i]
+                    self.u_w[i] += self.momentum * self.u_w[i] + grads_nag["dw"][i]
+                    self.u_b[i] += self.momentum * self.u_b[i] + grads_nag["db"][i]
                 else:
-                    self.weights[i] += self.u_w[i]
-                    self.biases[i] += self.u_b[i]
+                    self.u_w[i] += self.momentum * self.u_w[i] + grads["dw"][i]
+                    self.u_b[i] += self.momentum * self.u_b[i] + grads["db"][i]
+                self.weights[i] -= self.lr * self.u_w[i]
+                self.biases[i] -= self.lr * self.u_b[i]
             
             elif self.optimizer == "rmsprop":
                 self.v_w[i] = self.beta * self.v_w[i] + (1 - self.beta) * grads["dw"][i] ** 2
                 self.v_b[i] = self.beta * self.v_b[i] + (1 - self.beta) * grads["db"][i] ** 2
-                self.weights[i] -= self.learning_rate * grads["dw"][i] / (np.sqrt(self.v_w[i]) + self.epsilon)
-                self.biases[i] -= self.learning_rate * grads["db"][i] / (np.sqrt(self.v_b[i]) + self.epsilon)
+                self.weights[i] -= self.lr * grads["dw"][i] / (np.sqrt(self.v_w[i]) + self.epsilon)
+                self.biases[i] -= self.lr * grads["db"][i] / (np.sqrt(self.v_b[i]) + self.epsilon)
             
             elif self.optimizer in ["adam", "nadam"]:
-                self.momentum_W[i] = self.beta1 * self.momentum_W[i] + (1 - self.beta1) * grads["dw"][i]
-                self.momentum_B[i] = self.beta1 * self.momentum_B[i] + (1 - self.beta1) * grads["db"][i]
-                self.v_W[i] = self.beta2 * self.v_W[i] + (1 - self.beta2) * (grads["dw"][i] ** 2)
-                self.v_B[i] = self.beta2 * self.v_B[i] + (1 - self.beta2) * (grads["dB"][i] ** 2)
+                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * grads["dw"][i]
+                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * grads["db"][i]
+                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grads["dw"][i] ** 2)
+                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grads["dB"][i] ** 2)
 
-                m_W_corr = self.momentum_W[i] / (1 - self.beta1 ** self.t)
-                m_B_corr = self.momentum_B[i] / (1 - self.beta1 ** self.t)
-                v_W_corr = self.v_W[i] / (1 - self.beta2 ** self.t)
-                v_B_corr = self.v_B[i] / (1 - self.beta2 ** self.t)
+                m_w_corr = self.u_w[i] / (1 - self.beta1 ** self.t)
+                m_b_corr = self.u_b[i] / (1 - self.beta1 ** self.t)
+                v_w_corr = self.v_w[i] / (1 - self.beta2 ** self.t)
+                v_b_corr = self.v_b[i] / (1 - self.beta2 ** self.t)
 
                 if self.optimizer == "nadam":
-                    m_W_corr = (self.beta1 * m_W_corr + (1 - self.beta1) * grads["dw"][i]) / (1 - self.beta1 ** self.t)
-                    m_B_corr = (self.beta1 * m_B_corr + (1 - self.beta1) * grads["db"][i]) / (1 - self.beta1 ** self.t)
+                    m_w_corr = (self.beta1 * m_w_corr + (1 - self.beta1) * grads["dw"][i]) / (1 - self.beta1 ** self.t)
+                    m_b_corr = (self.beta1 * m_b_corr + (1 - self.beta1) * grads["db"][i]) / (1 - self.beta1 ** self.t)
 
-                self.weights[i] -= self.lr * m_W_corr / (np.sqrt(v_W_corr) + self.epsilon)
-                self.biases[i] -= self.lr * m_B_corr / (np.sqrt(v_B_corr) + self.epsilon)
+                self.weights[i] -= self.lr * m_w_corr / (np.sqrt(v_w_corr) + self.epsilon)
+                self.biases[i] -= self.lr * m_b_corr / (np.sqrt(v_b_corr) + self.epsilon)
 
         self.t += 1  # Update time step for Adam/Nadam
     
