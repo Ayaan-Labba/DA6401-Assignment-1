@@ -1,4 +1,5 @@
 import numpy as np
+import wandb
 
 class NeuralNetwork:
     def __init__(self, input_size=1, hidden_layers=[1], output_size=1, activation="ReLU", weight_init="random", optimizer="sgd", 
@@ -107,7 +108,7 @@ class NeuralNetwork:
             dw.insert(0, dw_i) 
             
             if self.weight_decay > 0:
-                dw += self.weight_decay * self.weights[i]
+                dw[0] += self.weight_decay * self.weights[i].T
             
             db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
             if i > 0:
@@ -129,7 +130,7 @@ class NeuralNetwork:
             dw.insert(0, dw_i) 
             
             if self.weight_decay > 0:
-                dw += self.weight_decay * self.weights[i]
+                dw[i] += self.weight_decay * self.weights[i].T
             
             db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
             if i > 0:
@@ -197,7 +198,7 @@ class NeuralNetwork:
 
         self.t += 1  # Update time step for Adam/Nadam
     
-    def train(self, X_train, Y_train, epochs, batch_size, validation_data=None, log_interval=1):
+    def train(self, X_train, Y_train, epochs, batch_size, validation_data=None, log_interval=1, wandb_log=False):
         history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
         n = X_train.shape[0]
         for epoch in range(epochs):
@@ -230,6 +231,20 @@ class NeuralNetwork:
                 history['val_accuracy'].append(val_accuracy)
                 
                 log_str += f", Val_Loss={val_loss:.4f}, Val_Accuracy={val_accuracy:.4f}"
+
+            # Log to wandb if enabled
+            if wandb_log:
+                metrics = {
+                    "epoch": epoch,
+                    "loss": train_loss,
+                    "accuracy": train_accuracy
+                }
+                
+                if val_loss is not None and val_accuracy is not None:
+                    metrics["val_loss"] = val_loss
+                    metrics["val_accuracy"] = val_accuracy
+                
+                wandb.log(metrics)
                 
             print(log_str)
         

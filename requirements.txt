@@ -1,4 +1,5 @@
 tensorflow
 matplotlib
 wandb
-sklearn
+scikit-learn
+seaborn
