@@ -2,7 +2,7 @@ import numpy as np
 
 class NeuralNetwork:
     def __init__(self, input_size=1, hidden_layers=[1], output_size=1, activation="ReLU", weight_init="random", optimizer="sgd", 
-                 lr=0.01, momentum=0.9, beta = 0.9, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0):
+                 lr=0.1, momentum=0.9, beta = 0.9, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0):
         self.layers = [input_size] + hidden_layers + [output_size]
         self.activation = activation
         self.weights, self.biases = self.init_weights(weight_init)
@@ -31,7 +31,7 @@ class NeuralNetwork:
             input_dim, output_dim = int(self.layers[i]), int(self.layers[i+1])
             
             if weight_init == "random":
-                w = np.random.randn(output_dim, input_dim)  # Small random values
+                w = np.random.randn(output_dim, input_dim) * 0.01 # Small random values
             
             elif weight_init == "Xavier":
                 w = np.random.randn(output_dim, input_dim) * np.sqrt(1 / input_dim)  # Xavier initialization
@@ -70,27 +70,25 @@ class NeuralNetwork:
     def softmax(self, x):
         exp_x = np.exp(x - np.max(x, axis=0, keepdims=True))
         return exp_x / np.sum(exp_x, axis=0, keepdims=True)
+        #return np.exp(x)/np.sum(np.exp(x), axis=0, keepdims=True)
     
     def loss(self, Y_pred, Y_true):
         n = Y_true.shape[0]
         loss = -np.sum(Y_true * np.log(Y_pred + 1e-9)) / n
         return loss
     
-    def gradients(self, H, A, Y_true):
+    def gradients(self, H, A, Y_true, dw, db):
         n = Y_true.shape[0]
         da = -(Y_true - H[-1])  # Cross-entropy gradient w.r.t output layer
-        dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(H[i].T, da) / n) #+ self.weight_decay * self.weights[i]
-            db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
-            #db.insert(0, da / m)
+            dw[i] = np.dot(da, H[i].T) / n  #+ self.weight_decay * self.weights[i]
+            db[i] = np.sum(da, axis=0, keepdims=True) / n
             if i > 0:
                 dh = np.dot(da, self.weights[i])
                 da = dh * self.activation_function(A[i-1], derivative=True)
-                #da = np.dot(self.weights[i].T, da) * self.activation_function(A[i-1], derivative=True)
 
-        return {"dw": dw, "db": db}
+        return dw, db
 
     def gradients_nag(self, H, A, Y_true, u_w):
         m = Y_true.shape[1]
@@ -98,44 +96,41 @@ class NeuralNetwork:
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(da, H[i].T) / m)  + self.weight_decay * self.weights[i]
-            #print("dw1 shape:", dw.shape)
-            #db.insert(0, np.sum(da, axis=1, keepdims=True) / m)
-            db.insert(0, np.da / m)
+            dw[i] = np.dot(da, H[i].T) / m  #+ self.weight_decay * self.weights[i]
+            db[i] = np.sum(da, axis=0, keepdims=True) / m
             if i > 0:
                 dh = np.dot((self.weights[i] - u_w).T, da)
                 da = dh * self.activation_function(A[i-1], derivative=True)
-                #da = np.dot(self.weights[i].T, da) * self.activation_function(A[i-1], derivative=True)
-
-        return {"dw": dw, "db": db}
+        
+        return dw, dh
     
-    def gradient_descent(self, grads, grads_nag=None):
+    def gradient_descent(self, dw, db, grads_nag=None):
         for i in range(len(self.weights)):
             if self.optimizer == "sgd":
-                self.weights[i] -= self.lr * grads["dw"][i].T
-                self.biases[i] -= self.lr * grads["db"][i].T
+                self.weights[i] -= self.lr * dw[i].T
+                self.biases[i] -= self.lr * db[i].T
             
             elif self.optimizer in ["momentum", "nesterov"]:
                 if self.optimizer == "nesterov":
                     self.u_w[i] += self.momentum * self.u_w[i] + grads_nag["dw"][i].T
                     self.u_b[i] += self.momentum * self.u_b[i] + grads_nag["db"][i].T
                 else:
-                    self.u_w[i] += self.momentum * self.u_w[i] + grads["dw"][i].T
-                    self.u_b[i] += self.momentum * self.u_b[i] + grads["db"][i].T
+                    self.u_w[i] += self.momentum * self.u_w[i] + dw[i].T
+                    self.u_b[i] += self.momentum * self.u_b[i] + db[i].T
                 self.weights[i] -= self.lr * self.u_w[i]
                 self.biases[i] -= self.lr * self.u_b[i]
             
             elif self.optimizer == "rmsprop":
-                self.v_w[i] = self.beta * self.v_w[i] + (1 - self.beta) * (grads["dw"][i] ** 2).T
-                self.v_b[i] = self.beta * self.v_b[i] + (1 - self.beta) * (grads["db"][i] ** 2).T
-                self.weights[i] -= self.lr * grads["dw"][i] / (np.sqrt(self.v_w[i]) + self.epsilon)
+                self.v_w[i] = self.beta * self.v_w[i] + (1 - self.beta) * (dw[i] ** 2).T
+                self.v_b[i] = self.beta * self.v_b[i] + (1 - self.beta) * (db[i] ** 2).T
+                self.weights[i] -= self.lr * dw[i] / (np.sqrt(self.v_w[i]) + self.epsilon)
                 self.biases[i] -= self.lr * grads["db"][i] / (np.sqrt(self.v_b[i]) + self.epsilon)
             
             elif self.optimizer in ["adam", "nadam"]:
-                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * grads["dw"][i].T
-                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * grads["db"][i].T
-                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grads["dw"][i] ** 2).T
-                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grads["db"][i] ** 2).T
+                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * dw[i].T
+                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * db[i].T
+                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (dw[i] ** 2).T
+                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (db[i] ** 2).T
 
                 m_w_corr = self.u_w[i] / (1 - self.beta1 ** self.t)
                 m_b_corr = self.u_b[i] / (1 - self.beta1 ** self.t)
@@ -143,8 +138,8 @@ class NeuralNetwork:
                 v_b_corr = self.v_b[i] / (1 - self.beta2 ** self.t)
 
                 if self.optimizer == "nadam":
-                    m_w_corr = (self.beta1 * m_w_corr + (1 - self.beta1) * grads["dw"][i]) / (1 - self.beta1 ** self.t)
-                    m_b_corr = (self.beta1 * m_b_corr + (1 - self.beta1) * grads["db"][i]) / (1 - self.beta1 ** self.t)
+                    m_w_corr = (self.beta1 * m_w_corr + (1 - self.beta1) * dw[i]) / (1 - self.beta1 ** self.t)
+                    m_b_corr = (self.beta1 * m_b_corr + (1 - self.beta1) * db[i]) / (1 - self.beta1 ** self.t)
 
                 self.weights[i] -= self.lr * m_w_corr / (np.sqrt(v_w_corr) + self.epsilon)
                 self.biases[i] -= self.lr * m_b_corr / (np.sqrt(v_b_corr) + self.epsilon)
@@ -156,12 +151,16 @@ class NeuralNetwork:
         for epoch in range(epochs):
             indices = np.random.permutation(n)
             X_train, Y_train = X_train[indices], Y_train[indices]
+            dw, db = [np.zeros_like(w) for w in self.weights], [np.zeros_like(b) for b in self.biases]
 
             for i in range(0, n, batch_size):
                 X_batch, Y_batch = X_train[i:i+batch_size, :], Y_train[i:i+batch_size, :]
                 H, A = self.forward(X_batch)
-                grads = self.gradients(H, A, Y_batch)
-                self.gradient_descent(grads)
+                dwi, dbi = self.gradients(H, A, Y_batch, dw, db)
+                dw += dwi
+                db += dbi
+            
+            self.gradient_descent(dw, db)
 
             if epoch % log_interval == 0:
                 Y_pred = self.predict(X_train)
