@@ -103,7 +103,12 @@ class NeuralNetwork:
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(H[i].T, da) / n) + self.weight_decay * self.weights[i]
+            dw_i = np.dot(H[i].T, da) / n
+            dw.insert(0, dw_i) 
+            
+            if self.weight_decay > 0:
+                dw += self.weight_decay * self.weights[i]
+            
             db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
             if i > 0:
                 dh = np.dot(da, self.weights[i])
@@ -120,7 +125,12 @@ class NeuralNetwork:
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(H[i].T, da) / n) + self.weight_decay * self.weights[i]
+            dw_i = np.dot(H[i].T, da) / n
+            dw.insert(0, dw_i) 
+            
+            if self.weight_decay > 0:
+                dw += self.weight_decay * self.weights[i]
+            
             db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
             if i > 0:
                 dh = np.dot(da, self.weights[i] - self.u_w[i])
@@ -187,7 +197,7 @@ class NeuralNetwork:
 
         self.t += 1  # Update time step for Adam/Nadam
     
-    def train(self, X_train, Y_train, epochs, batch_size, validation_data=None, log_interval=5):
+    def train(self, X_train, Y_train, epochs, batch_size, validation_data=None, log_interval=1):
         history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
         n = X_train.shape[0]
         for epoch in range(epochs):
