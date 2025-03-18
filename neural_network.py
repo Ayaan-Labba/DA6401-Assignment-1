@@ -87,6 +87,14 @@ class NeuralNetwork:
         n = Y_true.shape[0]
         #Y_pred = np.clip(Y_pred, self.epsilon, 1 - self.epsilon)
         loss = -np.sum(Y_true * np.log(Y_pred + self.epsilon)) / n
+
+        # Add L2 regularization if weight_decay is set
+        if self.weight_decay > 0:
+            l2_reg = 0
+            for w in self.weights:
+                l2_reg += np.sum(np.square(w))
+            loss += 0.5 * self.weight_decay * l2_reg / n
+        
         return loss
     
     def gradients(self, H, A, Y_true):
@@ -95,7 +103,7 @@ class NeuralNetwork:
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(H[i].T, da) / n) #+ self.weight_decay * self.weights[i]
+            dw.insert(0, np.dot(H[i].T, da) / n) + self.weight_decay * self.weights[i]
             db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
             if i > 0:
                 dh = np.dot(da, self.weights[i])
@@ -112,7 +120,7 @@ class NeuralNetwork:
         dw, db = [], []
 
         for i in reversed(range(len(self.weights))):
-            dw.insert(0, np.dot(H[i].T, da) / n) #+ self.weight_decay * self.weights[i]
+            dw.insert(0, np.dot(H[i].T, da) / n) + self.weight_decay * self.weights[i]
             db.insert(0, np.sum(da, axis=0, keepdims=True) / n)
             if i > 0:
                 dh = np.dot(da, self.weights[i] - self.u_w[i])
