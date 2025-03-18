@@ -187,7 +187,8 @@ class NeuralNetwork:
 
         self.t += 1  # Update time step for Adam/Nadam
     
-    def train(self, X_train, Y_train, epochs, batch_size, log_interval=1):
+    def train(self, X_train, Y_train, epochs, batch_size, validation_data=None, log_interval=5):
+        history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
         n = X_train.shape[0]
         for epoch in range(epochs):
             for i in range(0, n, batch_size):
@@ -199,10 +200,38 @@ class NeuralNetwork:
                 self.gradient_descent(grads)
 
             if epoch % log_interval == 0:
+                # Compute training metrics
                 Y_pred = self.predict(X_train)
-                loss = self.loss(Y_pred, Y_train)
-                #accuracy = np.mean(np.argmax(Y_pred, axis=0) == np.argmax(Y_train, axis=0))
-                print(f"Epoch {epoch}: Loss={loss:.4f}")
+                train_loss = self.loss(Y_pred, Y_train)
+                train_accuracy = self.accuracy(Y_pred, Y_train)
+                
+                history['loss'].append(train_loss)
+                history['accuracy'].append(train_accuracy)
+                
+                log_str = f"Epoch {epoch+1}/{epochs}: Loss={train_loss:.4f}, Accuracy={train_accuracy:.4f}"
+
+            if validation_data is not None:
+                X_val, Y_val = validation_data
+                Y_val_pred = self.predict(X_val)
+                val_loss = self.loss(Y_val_pred, Y_val)
+                val_accuracy = self.accuracy(Y_val_pred, Y_val)
+                
+                history['val_loss'].append(val_loss)
+                history['val_accuracy'].append(val_accuracy)
+                
+                log_str += f", Val_Loss={val_loss:.4f}, Val_Accuracy={val_accuracy:.4f}"
+                
+            print(log_str)
+        
+        return history
+    
+    def accuracy(self, Y_pred, Y_true):
+        """
+        Calculate classification accuracy from predicted probabilities.
+        """
+        pred_classes = np.argmax(Y_pred, axis=1)
+        true_classes = np.argmax(Y_true, axis=1)
+        return np.mean(pred_classes == true_classes)
 
     def predict(self, X):
         """
