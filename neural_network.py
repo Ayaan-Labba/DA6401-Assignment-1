@@ -179,10 +179,17 @@ class NeuralNetwork:
                 self.biases[i] -= self.lr * grads["db"][i].T / (np.sqrt(self.v_b[i]) + self.epsilon)
             
             elif self.optimizer in ["adam", "nadam"]:
-                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * grads["dw"][i].T
-                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * grads["db"][i].T
-                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grads["dw"][i].T ** 2)
-                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grads["db"][i].T ** 2)
+                grad_w = grads["dw"][i].T
+                grad_b = grads["db"][i].T
+                
+                # # Clip gradients to prevent explosion
+                # grad_w = np.clip(grad_w, -5.0, 5.0)
+                # grad_b = np.clip(grad_b, -5.0, 5.0)  
+
+                self.u_w[i] = self.beta1 * self.u_w[i] + (1 - self.beta1) * grad_w
+                self.u_b[i] = self.beta1 * self.u_b[i] + (1 - self.beta1) * grad_b
+                self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grad_w ** 2)
+                self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grad_b ** 2)
 
                 m_w_corr = self.u_w[i] / (1 - self.beta1 ** self.t)
                 m_b_corr = self.u_b[i] / (1 - self.beta1 ** self.t)
@@ -190,8 +197,8 @@ class NeuralNetwork:
                 v_b_corr = self.v_b[i] / (1 - self.beta2 ** self.t)
 
                 if self.optimizer == "nadam":
-                    m_w_corr = (self.beta1 * m_w_corr + (1 - self.beta1) * grads["dw"][i].T) / (1 - self.beta1 ** self.t)
-                    m_b_corr = (self.beta1 * m_b_corr + (1 - self.beta1) * grads["db"][i].T) / (1 - self.beta1 ** self.t)
+                    m_w_corr = (self.beta1 * m_w_corr + (1 - self.beta1) * grad_w) / (1 - self.beta1 ** self.t)
+                    m_b_corr = (self.beta1 * m_b_corr + (1 - self.beta1) * grad_b) / (1 - self.beta1 ** self.t)
 
                 self.weights[i] -= self.lr * m_w_corr / (np.sqrt(v_w_corr) + self.epsilon)
                 self.biases[i] -= self.lr * m_b_corr / (np.sqrt(v_b_corr) + self.epsilon)

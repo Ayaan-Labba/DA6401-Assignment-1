@@ -8,22 +8,15 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 
-def preprocess_data(X_train, Y_train, X_test, Y_test):
-    X_train_reshape = np.array(X_train).reshape(X_train.shape[0], -1).astype(float)
-    X_test_reshape = np.array(X_test).reshape(X_test.shape[0], -1).astype(float)
+def preprocess_data(X, Y):
+    X_reshape = np.array(X).reshape(X.shape[0], -1).astype(float)
+    Y_reshape = np.zeros((Y.shape[0], 10)).astype(float)
 
-    Y_train_reshape = np.zeros((Y_train.shape[0], 10)).astype(float)
-    Y_test_reshape = np.zeros((Y_test.shape[0], 10)).astype(float)
-
-    for i in range(Y_train.shape[0]):
-        y = Y_train[i]
-        Y_train_reshape[i, y] = 1
+    for i in range(Y.shape[0]):
+        y = Y[i]
+        Y_reshape[i, y] = 1
     
-    for i in range(Y_test.shape[0]):
-        y = Y_test[i]
-        Y_test_reshape[i, y] = 1
-    
-    return X_train_reshape, Y_train_reshape, X_test_reshape, Y_test_reshape
+    return X_reshape, Y_reshape
 
 def plot_confusion_matrix(y_true, y_pred, class_names=None):
     """Plot confusion matrix."""
@@ -59,26 +52,26 @@ def main():
     parser.add_argument('-we', '--wandb_entity', default="ch21b021-indian-institute-of-technology-madras", help="Wandb Entity used to track experiments in the Weights & Biases dashboard")
 
     # Model Architecture
-    parser.add_argument('-nhl', '--num_layers', type=int, default=1, help="Number of hidden layers used in feedforward neural network")
-    parser.add_argument('-sz', '--hidden_size', type=int, default=4, help="Number of hidden neurons in a feedforward layer")
+    parser.add_argument('-nhl', '--num_layers', type=int, default=2, help="Number of hidden layers used in feedforward neural network")
+    parser.add_argument('-sz', '--hidden_size', type=int, default=32, help="Number of hidden neurons in a feedforward layer")
     
     # Training Parameters
-    parser.add_argument('-e', '--epochs', type=int, default=1, help="Number of epochs to train neural network")
-    parser.add_argument('-b', '--batch_size', type=int, default=4, help="Batch size used to train neural network")
+    parser.add_argument('-e', '--epochs', type=int, default=5, help="Number of epochs to train neural network")
+    parser.add_argument('-b', '--batch_size', type=int, default=32, help="Batch size used to train neural network")
     parser.add_argument('-l', '--loss', type=str, default="cross_entropy", choices=["mean_squared_error", "cross_entropy"], help="Loss function for training")
-    parser.add_argument('-lr', '--learning_rate', type=float, default=0.1, help="Learning rate used to optimize model parameters")
+    parser.add_argument('-lr', '--learning_rate', type=float, default=0.01, help="Learning rate used to optimize model parameters")
     parser.add_argument('-wd', '--weight_decay', type=float, default=0.0, help="Weight decay used by optimizers")
     
     # Optimization
     parser.add_argument('-o', '--optimizer', type=str, choices=["sgd", "momentum", "nag", "rmsprop", "adam", "nadam"], default="sgd", help="Optimizer to use for updating weights")
-    parser.add_argument('-m', '--momentum', type=float, default=0.5, help="Momentum used by momentum and nag optimizers")
-    parser.add_argument('-beta', '--beta', type=float, default=0.5, help="Beta used by rmsprop optimizer")
-    parser.add_argument('-beta1', '--beta1', type=float, default=0.5, help="Beta1 used by adam and nadam optimizers")
-    parser.add_argument('-beta2', '--beta2', type=float, default=0.5, help="Beta2 used by adam and nadam optimizers")
+    parser.add_argument('-m', '--momentum', type=float, default=0.9, help="Momentum used by momentum and nag optimizers")
+    parser.add_argument('-beta', '--beta', type=float, default=0.9, help="Beta used by rmsprop optimizer")
+    parser.add_argument('-beta1', '--beta1', type=float, default=0.9, help="Beta1 used by adam and nadam optimizers")
+    parser.add_argument('-beta2', '--beta2', type=float, default=0.999, help="Beta2 used by adam and nadam optimizers")
     parser.add_argument('-eps', '--epsilon', type=float, default=0.000001, help="Epsilon used by optimizers")
     
     # Activation & Weight Initialization
-    parser.add_argument('-a', '--activation', type=str, choices=["identity", "sigmoid", "tanh", "ReLU"], default="sigmoid", help="Activation function for each layer")
+    parser.add_argument('-a', '--activation', type=str, choices=["identity", "sigmoid", "tanh", "ReLU"], default="ReLU", help="Activation function for each layer")
     parser.add_argument('-w_i', '--weight_init', type=str, choices=["random", "Xavier"], default="random", help="Weight initialization method ('random' preffered for 'ReLU' activation, 'Xavier' preferred for 'sigmoid' and 'tanh' activations)")
     
     # Logging
@@ -86,15 +79,15 @@ def main():
 
     args = parser.parse_args()
 
-    run_name = f"hl_{args.num_layers}_bs_{args.batch_size}_ac_{args.activation}_opt_{args.optimizer}"
+    run_name = f"hl_{args.num_layers}_sz_{args.hidden_size}_bs_{args.batch_size}_ac_{args.activation}_opt_{args.optimizer}_w_{args.weight_init}_lr_{args.learning_rate}_wd_{args.weight_decay}"
 
     # Initialize wandb
     wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args), name=run_name)
 
     # Load dataset
-    X_train, Y_train, X_test, Y_test = load_data(args.dataset)
+    X_train, Y_train, _, _ = load_data(args.dataset)
 
-    X_train_reshape, Y_train_reshape, X_test_reshape, Y_test_reshape = preprocess_data(X_train, Y_train, X_test, Y_test)
+    X_train_reshape, Y_train_reshape = preprocess_data(X_train, Y_train)
 
     # Split training data into train and validation
     x_train, x_val, y_train, y_val = train_test_split(X_train_reshape, Y_train_reshape, test_size=0.1, random_state=42)
@@ -106,7 +99,7 @@ def main():
     model = NeuralNetwork(
         input_size=x_train.shape[1],
         hidden_layers=hidden_layers,
-        output_size=10,
+        output_size=y_train.shape[1],
         activation=args.activation,
         weight_init=args.weight_init,
         optimizer=args.optimizer,
@@ -130,7 +123,7 @@ def main():
     )
 
     # Log metrics to wandb
-    wandb.log(history)
+    #wandb.log(history)
 
     # # Evaluate on test set
     # Y_pred = model.predict(X_test_reshape)
