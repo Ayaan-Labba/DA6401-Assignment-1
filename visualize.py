@@ -1,10 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from dataset import load_data
+import wandb
 
 # Display one sample from each class
 def visualize_samples():
-    (X_train, y_train), _ = load_data(dataset="fashion_mnist")
+    # Initialize wandb
+    wandb.init(project="DA6401-Assignment-1", entity="ch21b021-indian-institute-of-technology-madras", name="Data Visualization")
+
+    X_train, y_train, _, _ = load_data(dataset="fashion_mnist")
     class_labels = ["T-shirt", "Trouser", "Pullover", "Dress", "Coat", 
                     "Sandal", "Shirt", "Sneaker", "Bag", "Ankle Boot"]
     fig, axes = plt.subplots(2, 5, figsize=(10, 5))
@@ -14,4 +18,16 @@ def visualize_samples():
         ax.imshow(X_train[idx], cmap="gray")
         ax.set_title(label)
         ax.axis("off")
-    plt.show()
+
+    # Save the figure locally
+    plt.savefig('fashion_mnist_samples.png')
+    plt.close()
+    
+    # Log the image to wandb
+    wandb.log({"fashion_mnist_samples": wandb.Image('fashion_mnist_samples.png')})
+    
+    # Finish wandb run
+    wandb.finish()
+
+if __name__ == "__main__":
+    visualize_samples()

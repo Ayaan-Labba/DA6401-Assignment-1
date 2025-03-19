@@ -4,9 +4,6 @@ from dataset import load_data
 from neural_network import NeuralNetwork
 import wandb
 from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
 
 def preprocess_data(X, Y):
     X_reshape = np.array(X).reshape(X.shape[0], -1).astype(float)
@@ -17,29 +14,6 @@ def preprocess_data(X, Y):
         Y_reshape[i, y] = 1
     
     return X_reshape, Y_reshape
-
-def plot_confusion_matrix(y_true, y_pred, class_names=None):
-    """Plot confusion matrix."""
-    # Convert from one-hot to class indices
-    y_true_classes = np.argmax(y_true, axis=1)
-    y_pred_classes = np.argmax(y_pred, axis=1)
-    
-    # Compute confusion matrix
-    cm = confusion_matrix(y_true_classes, y_pred_classes)
-    
-    # Plot confusion matrix
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=class_names, yticklabels=class_names)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.title('Confusion Matrix')
-    
-    # Save figure for wandb
-    plt.savefig('confusion_matrix.png')
-    plt.close()
-    
-    return 'confusion_matrix.png'
 
 def main():
     parser = argparse.ArgumentParser(description="Train a Neural Network")
@@ -52,18 +26,18 @@ def main():
     parser.add_argument('-we', '--wandb_entity', default="ch21b021-indian-institute-of-technology-madras", help="Wandb Entity used to track experiments in the Weights & Biases dashboard")
 
     # Model Architecture
-    parser.add_argument('-nhl', '--num_layers', type=int, default=2, help="Number of hidden layers used in feedforward neural network")
-    parser.add_argument('-sz', '--hidden_size', type=int, default=32, help="Number of hidden neurons in a feedforward layer")
+    parser.add_argument('-nhl', '--num_layers', type=int, default=3, help="Number of hidden layers used in feedforward neural network")
+    parser.add_argument('-sz', '--hidden_size', type=int, default=128, help="Number of hidden neurons in a feedforward layer")
     
     # Training Parameters
-    parser.add_argument('-e', '--epochs', type=int, default=5, help="Number of epochs to train neural network")
-    parser.add_argument('-b', '--batch_size', type=int, default=32, help="Batch size used to train neural network")
+    parser.add_argument('-e', '--epochs', type=int, default=10, help="Number of epochs to train neural network")
+    parser.add_argument('-b', '--batch_size', type=int, default=16, help="Batch size used to train neural network")
     parser.add_argument('-l', '--loss', type=str, default="cross_entropy", choices=["mean_squared_error", "cross_entropy"], help="Loss function for training")
-    parser.add_argument('-lr', '--learning_rate', type=float, default=0.01, help="Learning rate used to optimize model parameters")
-    parser.add_argument('-wd', '--weight_decay', type=float, default=0.0, help="Weight decay used by optimizers")
+    parser.add_argument('-lr', '--learning_rate', type=float, default=0.001, help="Learning rate used to optimize model parameters")
+    parser.add_argument('-wd', '--weight_decay', type=float, default=0.005, help="Weight decay used by optimizers")
     
     # Optimization
-    parser.add_argument('-o', '--optimizer', type=str, choices=["sgd", "momentum", "nag", "rmsprop", "adam", "nadam"], default="sgd", help="Optimizer to use for updating weights")
+    parser.add_argument('-o', '--optimizer', type=str, choices=["sgd", "momentum", "nag", "rmsprop", "adam", "nadam"], default="rmsprop", help="Optimizer to use for updating weights")
     parser.add_argument('-m', '--momentum', type=float, default=0.9, help="Momentum used by momentum and nag optimizers")
     parser.add_argument('-beta', '--beta', type=float, default=0.9, help="Beta used by rmsprop optimizer")
     parser.add_argument('-beta1', '--beta1', type=float, default=0.9, help="Beta1 used by adam and nadam optimizers")
@@ -121,29 +95,6 @@ def main():
         log_interval=args.log_interval,
         wandb_log=True
     )
-
-    # Log metrics to wandb
-    #wandb.log(history)
-
-    # # Evaluate on test set
-    # Y_pred = model.predict(X_test_reshape)
-    # test_loss = model.loss(Y_pred, Y_test_reshape)
-    # test_accuracy = model.accuracy(Y_pred, Y_test_reshape)
-
-    # print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}")
-
-    # # Log metrics to wandb
-    # wandb.log({
-    #     "test_loss": test_loss,
-    #     "test_accuracy": test_accuracy
-    # })
-    
-    # # Create and log confusion matrix
-    # class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
-    #                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot'] if args.dataset == 'fashion_mnist' else None
-    
-    # cm_image = plot_confusion_matrix(Y_test_reshape, Y_pred, class_names)
-    # wandb.log({"confusion_matrix": wandb.Image(cm_image)})
     
     # Finish wandb run
     wandb.finish()
