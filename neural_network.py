@@ -208,6 +208,9 @@ class NeuralNetwork:
     def train(self, X_train, Y_train, epochs, batch_size, validation_data=None, log_interval=1, wandb_log=False):
         history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
         n = X_train.shape[0]
+        indices = np.random.permutation(n)
+        X_train, Y_train = X_train[indices], Y_train[indices]
+        
         for epoch in range(epochs):
             for i in range(0, n, batch_size):
                 X_batch, Y_batch = X_train[i:i+batch_size], Y_train[i:i+batch_size]
